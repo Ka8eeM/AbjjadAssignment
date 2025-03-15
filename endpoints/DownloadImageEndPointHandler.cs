@@ -15,7 +15,7 @@ public static class DownloadImageEndPointHandler
         try
         {
             var response = await downloadImageService.DownloadImageAsync(uniqueImageId, size);
-            return Results.Ok(response);
+            return Results.File(response.FileStream, "image/webp", $"{uniqueImageId}.webp");
         }
         catch (Exception ex)
         {

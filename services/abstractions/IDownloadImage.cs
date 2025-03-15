@@ -4,5 +4,5 @@ namespace AbjjadAssignment.services.abstractions;
 
 public interface IDownloadImage
 {
-    Task<string> DownloadImageAsync(string uniqueImageId, string size);
+    Task<FileStreamResult> DownloadImageAsync(string uniqueImageId, string size);
 }

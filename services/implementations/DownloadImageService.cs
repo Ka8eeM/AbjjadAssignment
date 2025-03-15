@@ -17,7 +17,7 @@ internal sealed class DownloadImageService : IDownloadImage
         _logger = logger;
     }
 
-    public async Task<string> DownloadImageAsync(string uniqueImageId, string size)
+    public async Task<FileStreamResult> DownloadImageAsync(string uniqueImageId, string size)
     {
         await Task.CompletedTask;
         try
@@ -37,12 +37,13 @@ internal sealed class DownloadImageService : IDownloadImage
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("Image not found");
 
-            // return the filePath is best practice the file could be saved on
+            // much better: return the filePath is best practice the file could be saved on
             // content management service like S3 buckets
-            // so return the full path of the file then download it.
 
-            // we can return the file stream itself if the business require this.
-            return filePath;
+            // but will return the file as is as required
+            var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+            var fileStreamResult = new FileStreamResult(stream, "image/webp");
+            return fileStreamResult;
         }
         catch (Exception ex)
         {
