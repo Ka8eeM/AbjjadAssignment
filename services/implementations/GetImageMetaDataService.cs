@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using AbjjadAssignment.services.abstractions;
+using AbjjadAssignment.services.shared;
 
 namespace AbjjadAssignment.services.implementations;
 
@@ -20,12 +21,12 @@ internal sealed class GetImageMetaDataService : IGetImageMetaData
         _logger = logger;
     }
 
-    public async Task<ImageMetadataResponse> GetImageMetadataAsync(string uniqueImageId)
+    public async Task<(ImageMetadataResponse? response, ServiceError? error)> GetImageMetadataAsync(string uniqueImageId)
     {
         try
         {
             if (string.IsNullOrEmpty(uniqueImageId))
-                throw new ArgumentException("Invalid image ID");
+                return (null, ServiceError.InvalidFormat("image ID - null or empty"));
 
             var metadataPath = Path.Combine(
                 _environment.ContentRootPath,
@@ -35,17 +36,20 @@ internal sealed class GetImageMetaDataService : IGetImageMetaData
             );
 
             if (!File.Exists(metadataPath))
-                throw new FileNotFoundException("Metadata not found");
+                return (null, ServiceError.ProcessingFailed($"metadata retrieval for image ID {uniqueImageId} - file not found"));
 
             var json = await File.ReadAllTextAsync(metadataPath);
             var metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
 
-            return new ImageMetadataResponse(uniqueImageId, metadata!);
+            if (metadata == null)
+                return (null, ServiceError.ProcessingFailed($"metadata deserialization for image ID {uniqueImageId}"));
+
+            return (new ImageMetadataResponse(uniqueImageId, metadata), null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving metadata");
-            throw;
+            _logger.LogError(ex, "Error retrieving metadata for image ID {ImageId}", uniqueImageId);
+            return (null, ServiceError.InternalError($"retrieving metadata for image ID {uniqueImageId}"));
         }
     }
 }

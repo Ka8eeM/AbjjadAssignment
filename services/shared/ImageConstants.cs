@@ -1,4 +1,4 @@
-﻿namespace AbjjadAssignment.services;
+﻿namespace AbjjadAssignment.services.shared;
 
 public static class Phone
 {

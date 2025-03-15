@@ -1,62 +1,61 @@
 ﻿using AbjjadAssignment.services.abstractions;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Metadata.Profiles.Exif;
 using SixLabors.ImageSharp.Processing;
+using AbjjadAssignment.services.shared;
 
 namespace AbjjadAssignment.services.implementations;
 
 internal sealed class ImageProcessorService : IImageProcessor
 {
-    public async Task<(byte[] webpData, ImageMetadata metadata)> ProcessImageAsync(IFormFile image)
+    public async Task<(byte[]? webpData, ImageMetadata? metadata, ServiceError? error)> ProcessImageAsync(IFormFile image)
     {
-        using var stream = image.OpenReadStream();
-        using var img = await Image.LoadAsync(stream);
-
-        var metaData = new ImageMetadata();
-        if (img.Metadata.ExifProfile is not null)
+        try
         {
-            IExifValue<Rational[]>? exifGeolocationLat = null;
-            IExifValue<Rational[]>? exifGeolocationLong = null;
-            IExifValue<string>? cameraMake = null;
-            IExifValue<string>? model = null;
+            using var stream = image.OpenReadStream();
+            using var img = await Image.LoadAsync(stream);
 
-            var goeLocationLatOK =
-                img.Metadata.ExifProfile?.TryGetValue(ExifTag.GPSLatitude, out exifGeolocationLat)
-                ?? false;
-            var geoLocationLongOK =
-                img.Metadata.ExifProfile?.TryGetValue(ExifTag.GPSLongitude, out exifGeolocationLong)
-                ?? false;
-
-            string geoLocation = string.Empty;
-
-            if (
-                goeLocationLatOK
-                && geoLocationLongOK
-                && exifGeolocationLat is not null
-                && exifGeolocationLong is not null
-            )
+            var metaData = new ImageMetadata();
+            if (img.Metadata.ExifProfile is not null)
             {
-                var latitude = ConvertToDecimalDegrees(exifGeolocationLat.Value);
-                var longitude = ConvertToDecimalDegrees(exifGeolocationLong.Value);
+                IExifValue<Rational[]>? exifGeolocationLat = null;
+                IExifValue<Rational[]>? exifGeolocationLong = null;
+                IExifValue<string>? cameraMake = null;
+                IExifValue<string>? model = null;
 
-                geoLocation =
-                    $"{latitude}° {(latitude >= 0 ? "N" : "S")}, {longitude}° {(longitude >= 0 ? "E" : "W")}";
+                var goeLocationLatOK =
+                    img.Metadata.ExifProfile?.TryGetValue(ExifTag.GPSLatitude, out exifGeolocationLat) ?? false;
+                var geoLocationLongOK =
+                    img.Metadata.ExifProfile?.TryGetValue(ExifTag.GPSLongitude, out exifGeolocationLong) ?? false;
+
+                string geoLocation = string.Empty;
+
+                if (goeLocationLatOK && geoLocationLongOK &&
+                    exifGeolocationLat is not null && exifGeolocationLong is not null)
+                {
+                    var latitude = ConvertToDecimalDegrees(exifGeolocationLat.Value);
+                    var longitude = ConvertToDecimalDegrees(exifGeolocationLong.Value);
+
+                    geoLocation =
+                        $"{latitude}° {(latitude >= 0 ? "N" : "S")}, {longitude}° {(longitude >= 0 ? "E" : "W")}";
+                }
+
+                var cameraMakeOK = img.Metadata.ExifProfile?.TryGetValue(ExifTag.Make, out cameraMake) ?? false;
+                var modelOK = img.Metadata.ExifProfile?.TryGetValue(ExifTag.Model, out model) ?? false;
+
+                metaData.GeoLocation = geoLocation;
+                metaData.CameraMake = cameraMakeOK && cameraMake is not null ? cameraMake.Value! : string.Empty;
+                metaData.CameraModel = modelOK && model is not null ? model.Value! : string.Empty;
             }
 
-            var cameraMakeOK =
-                img.Metadata.ExifProfile?.TryGetValue(ExifTag.Make, out cameraMake) ?? false;
-            var modelOK = img.Metadata.ExifProfile?.TryGetValue(ExifTag.Model, out model) ?? false;
-
-            metaData.GeoLocation = geoLocation;
-            metaData.CameraMake =
-                cameraMakeOK && cameraMake is not null ? cameraMake.Value! : string.Empty;
-            metaData.CameraModel = modelOK && model is not null ? model.Value! : string.Empty;
+            using var ms = new MemoryStream();
+            await img.SaveAsWebpAsync(ms);
+            return (ms.ToArray(), metaData, null);
         }
-
-        using var ms = new MemoryStream();
-        await img.SaveAsWebpAsync(ms);
-        return (ms.ToArray(), metaData);
+        catch (Exception ex)
+        {
+            return (null, null, ServiceError.InternalError($"processing image {image.FileName}"));
+        }
     }
 
     static double ConvertToDecimalDegrees(Rational[] coordinates)
@@ -71,23 +70,26 @@ internal sealed class ImageProcessorService : IImageProcessor
         return degrees + (minutes / 60.0) + (seconds / 3600.0);
     }
 
-    public async Task<byte[]> ResizeImageAsync(byte[] imageData, string size)
+    public async Task<(byte[]? resizedData, ServiceError? error)> ResizeImageAsync(byte[] imageData, string size)
     {
         if (imageData == null || imageData.Length == 0)
-            throw new ArgumentException("Image data cannot be null or empty.");
+            return (null, ServiceError.InvalidFormat("image data - null or empty"));
 
         try
         {
             using var msInput = new MemoryStream(imageData);
-            using var img = await Image.LoadAsync(msInput); // No 'out format' needed
+            using var img = await Image.LoadAsync(msInput);
 
             var (width, height) = size switch
             {
                 Phone.PHONE => (Phone.Width, Phone.Height),
                 Tablet.TABLET => (Tablet.Width, Tablet.Height),
                 Desktop.DESKTOP => (Desktop.Width, Desktop.Height),
-                _ => throw new ArgumentException("Invalid size"),
+                _ => (-1, -1) // Invalid size indicator
             };
+
+            if (width == -1 || height == -1)
+                return (null, ServiceError.InvalidFormat($"size parameter: {size}"));
 
             img.Mutate(x =>
                 x.Resize(
@@ -97,14 +99,11 @@ internal sealed class ImageProcessorService : IImageProcessor
 
             using var msOutput = new MemoryStream();
             await img.SaveAsWebpAsync(msOutput);
-            return msOutput.ToArray();
+            return (msOutput.ToArray(), null);
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException(
-                "An error occurred while processing the image.",
-                ex
-            );
+            return (null, ServiceError.InternalError($"resizing image to size {size} with error: {ex.Message}"));
         }
     }
 }

@@ -1,11 +1,15 @@
-﻿namespace AbjjadAssignment.services.abstractions;
+﻿using AbjjadAssignment.services.shared;
+
+
+namespace AbjjadAssignment.services.abstractions;
+
 
 public record ImageMetadataResponse(
-    string UniqueImageId, 
+    string UniqueImageId,
     Dictionary<string, string> Metadata);
 
 
 public interface IGetImageMetaData
 {
-    Task<ImageMetadataResponse> GetImageMetadataAsync(string uniqueImageId);
+    Task<(ImageMetadataResponse? response, ServiceError? error)> GetImageMetadataAsync(string uniqueImageId);
 }

@@ -12,8 +12,17 @@ public static class UploadImagesEndPointHandler
     {
         try
         {
-            var response = await imageService.UploadImagesAsync(images);
-            return Results.Ok(response);
+            var responses = await imageService.UploadImagesAsync(images);
+
+            if (responses.Any(r => !r.IsSuccess))
+            {
+                return Results.BadRequest(new
+                {
+                    Errors = responses.Where(r => !r.IsSuccess)
+                                  .Select(r => new { r.ImageId, r.Error })
+                });
+            }
+            return Results.Ok(responses);
         }
         catch (Exception ex)
         {

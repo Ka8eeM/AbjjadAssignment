@@ -14,7 +14,13 @@ public static class GetImageMetaDataEndPointHandler
         try
         {
             var response = await getImageMetaDataService.GetImageMetadataAsync(uniqueImageId);
-            return Results.Ok(response);
+
+            if (response.error is not null)
+            {
+                return Results.BadRequest(new { Error = new { response.error.Code, response.error.Message } });
+            }
+
+            return Results.Ok(response.response);
         }
         catch (Exception ex)
         {

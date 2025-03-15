@@ -13,6 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 var app = builder.Build();
 
+app.UseGlobalExceptionMiddleware();
+
 app.UseRouting();
 if (app.Environment.IsDevelopment())
 {

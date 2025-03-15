@@ -1,4 +1,5 @@
 ﻿using AbjjadAssignment.services.abstractions;
+using AbjjadAssignment.services.shared;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AbjjadAssignment.services.implementations;
@@ -17,15 +18,15 @@ internal sealed class DownloadImageService : IDownloadImage
         _logger = logger;
     }
 
-    public async Task<FileStreamResult> DownloadImageAsync(string uniqueImageId, string size)
+    public (FileStreamResult? result, ServiceError? error) DownloadImageAsync(string uniqueImageId, string size)
     {
-        await Task.CompletedTask;
         try
         {
-            if (
-                string.IsNullOrEmpty(uniqueImageId) || !ImageConstants.SizePresets.ContainsKey(size)
-            )
-                throw new ArgumentException("Invalid parameters");
+            if (string.IsNullOrEmpty(uniqueImageId))
+                return (null, ServiceError.InvalidFormat("image ID - null or empty"));
+
+            if (!ImageConstants.SizePresets.ContainsKey(size))
+                return (null, ServiceError.InvalidFormat($"size parameter: {size}"));
 
             var filePath = Path.Combine(
                 _environment.ContentRootPath,
@@ -35,20 +36,20 @@ internal sealed class DownloadImageService : IDownloadImage
             );
 
             if (!File.Exists(filePath))
-                throw new FileNotFoundException("Image not found");
+                return (null, ServiceError.ProcessingFailed($"image download for ID {uniqueImageId} size {size} - file not found"));
 
             // much better: return the filePath is best practice the file could be saved on
             // content management service like S3 buckets
 
-            // but will return the file as is as required
+            // but will return the file stream as required
             var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
             var fileStreamResult = new FileStreamResult(stream, "image/webp");
-            return fileStreamResult;
+            return (fileStreamResult, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error downloading image");
-            throw;
+            _logger.LogError(ex, "Error downloading image ID {ImageId} size {Size}", uniqueImageId, size);
+            return (null, ServiceError.InternalError($"downloading image ID {uniqueImageId} size {size}"));
         }
     }
 }

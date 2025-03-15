@@ -1,4 +1,6 @@
-﻿namespace AbjjadAssignment.services.abstractions;
+﻿using AbjjadAssignment.services.shared;
+
+namespace AbjjadAssignment.services.abstractions;
 
 public class ImageMetadata
 {
@@ -9,6 +11,6 @@ public class ImageMetadata
 
 public interface IImageProcessor
 {
-    Task<(byte[] webpData, ImageMetadata metadata)> ProcessImageAsync(IFormFile image);
-    Task<byte[]> ResizeImageAsync(byte[] imageData, string size);
+    Task<(byte[]? webpData, ImageMetadata? metadata, ServiceError? error)> ProcessImageAsync(IFormFile image);
+    Task<(byte[]? resizedData, ServiceError? error)> ResizeImageAsync(byte[] imageData, string size);
 }
