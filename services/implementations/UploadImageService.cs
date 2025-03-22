@@ -28,11 +28,18 @@ internal sealed class UploadImageService : IUploadImage
         if (images == null || !images.Any())
             return responses;
 
-        foreach (var image in images)
-        {
-            var response = await ProcessSingleImage(image);
-            responses.Add(response);
-        }
+        // for parallel and faster execution
+
+        var tasks = images.Select(image => ProcessSingleImage(image)).ToList();
+        responses.AddRange(await Task.WhenAll(tasks));
+
+
+        // foreach (var image in images)
+        // {
+
+        //     var response = await ProcessSingleImage(image);
+        //     responses.Add(response);
+        // }
 
         return responses;
     }
@@ -71,17 +78,28 @@ internal sealed class UploadImageService : IUploadImage
             var originalPath = Path.Combine(storagePath, "original.webp");
             await File.WriteAllBytesAsync(originalPath, webpData);
 
-            // Process and save resized versions
-            foreach (var size in ImageConstants.SizePresets.Keys)
-            {
-                var (resizedData, resizeError) = await _imageProcessor.ResizeImageAsync(webpData, size);
-                if (resizedData == null || resizeError != null)
-                    return new ImageUploadResponse(uniqueId, "error",
-                        resizeError ?? ServiceError.ProcessingFailed($"image resize to {size}"));
 
-                var resizedPath = Path.Combine(storagePath, $"{size}.webp");
-                await File.WriteAllBytesAsync(resizedPath, resizedData);
-            }
+            //for parallel execution
+            var resizeTasks = ImageConstants.SizePresets.Keys.Select(async size =>
+                    {
+                        var (data, error) = await _imageProcessor.ResizeImageAsync(webpData, size);
+                        if (data != null) await File.WriteAllBytesAsync(Path.Combine(storagePath, $"{size}.webp"), data);
+                        return error;
+                    });
+            var errors = (await Task.WhenAll(resizeTasks)).Where(e => e != null).ToList();
+            if (errors.Any()) return new ImageUploadResponse(uniqueId, "error", errors.First());
+
+            // // Process and save resized versions
+            // foreach (var size in ImageConstants.SizePresets.Keys)
+            // {
+            //     var (resizedData, resizeError) = await _imageProcessor.ResizeImageAsync(webpData, size);
+            //     if (resizedData == null || resizeError != null)
+            //         return new ImageUploadResponse(uniqueId, "error",
+            //             resizeError ?? ServiceError.ProcessingFailed($"image resize to {size}"));
+
+            //     var resizedPath = Path.Combine(storagePath, $"{size}.webp");
+            //     await File.WriteAllBytesAsync(resizedPath, resizedData);
+            // }
 
             // Save metadata
             var metadataPath = Path.Combine(storagePath, "metadata.json");
